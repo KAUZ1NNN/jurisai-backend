@@ -21,9 +21,9 @@ console.log('FRONTEND_URL =', process.env.FRONTEND_URL)
 
 // ─── MIDDLEWARES ───────────────────────────────────────────────────────────────
 app.use(cors({
-  origin     : process.env.FRONTEND_URL ?? 'http://localhost:5173',
-  methods    : ['GET', 'POST', 'PATCH', 'DELETE'],
+  origin: true,
   credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 app.use(express.json())
 
