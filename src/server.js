@@ -17,13 +17,11 @@ import { errorHandler, notFound } from './middleware/errorHandler.js'
 const app    = express()
 const server = http.createServer(app)
 
-console.log('FRONTEND_URL =', process.env.FRONTEND_URL)
-
 // ─── MIDDLEWARES ───────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: true,
+  origin     : process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  methods    : ['GET', 'POST', 'PATCH', 'DELETE'],
   credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 app.use(express.json())
 
