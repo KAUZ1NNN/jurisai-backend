@@ -17,6 +17,8 @@ import { errorHandler, notFound } from './middleware/errorHandler.js'
 const app    = express()
 const server = http.createServer(app)
 
+console.log("FRONTEND_URL =", process.env.FRONTEND_URL)
+
 // ─── MIDDLEWARES ───────────────────────────────────────────────────────────────
 app.use(cors({
   origin     : process.env.FRONTEND_URL ?? 'http://localhost:5173',
