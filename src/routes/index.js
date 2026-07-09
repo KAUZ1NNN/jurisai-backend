@@ -103,10 +103,12 @@ router.patch('/automations/:id', async (req, res) => {
 // ─── STATS ────────────────────────────────────────────────────────────────────
 
 router.get('/stats', async (req, res) => {
-  const [activeConvs, pendingAlerts, totalClients, msgStats, areaBreakdown] = await Promise.all([
+  const [activeConvs, pendingAlerts, totalClients, totalConvs, totalAlerts, msgStats, areaBreakdown, weekly] = await Promise.all([
     query(`SELECT COUNT(*) FROM conversations WHERE status = 'ia_ativa'`),
     query(`SELECT COUNT(*) FROM alerts WHERE status = 'pending'`),
     query(`SELECT COUNT(*) FROM clients`),
+    query(`SELECT COUNT(*) FROM conversations`),
+    query(`SELECT COUNT(*) FROM alerts`),
     query(`
       SELECT
         COUNT(*) FILTER (WHERE direction = 'out' AND sent_by = 'ia' AND status = 'sent') AS ai_sent,
@@ -120,11 +122,20 @@ router.get('/stats', async (req, res) => {
       WHERE area IS NOT NULL AND created_at > NOW() - INTERVAL '7 days'
       GROUP BY area
     `),
+    query(`
+      SELECT
+        EXTRACT(DOW FROM created_at) AS dow,
+        COUNT(*) AS total
+      FROM conversations
+      WHERE created_at > NOW() - INTERVAL '7 days'
+      GROUP BY dow
+      ORDER BY dow
+    `),
   ])
 
-  const aiSent  = Number(msgStats.rows[0].ai_sent)
+  const aiSent   = Number(msgStats.rows[0].ai_sent)
   const totalOut = Number(msgStats.rows[0].total_out)
-  const aiRate  = totalOut > 0 ? Math.round((aiSent / totalOut) * 100) : 0
+  const aiRate   = totalOut > 0 ? Math.round((aiSent / totalOut) * 100) : 0
 
   const areaTotal = areaBreakdown.rows.reduce((s, r) => s + Number(r.total), 0)
   const areaData  = areaBreakdown.rows.map(r => ({
@@ -133,12 +144,39 @@ router.get('/stats', async (req, res) => {
     color: { consumidor: '#378ADD', previdenciario: '#7F77DD', bancario: '#1D9E75' }[r.area] ?? '#9ca3af',
   }))
 
+  // Converte resultado semanal em array [seg,ter,qua,qui,sex,sab,dom]
+  // PostgreSQL DOW: 0=domingo, 1=segunda, ..., 6=sábado
+  const weeklyMap = {}
+  weekly.rows.forEach(r => { weeklyMap[Number(r.dow)] = Number(r.total) })
+  const weeklyConversations = [1,2,3,4,5,6,0].map(d => weeklyMap[d] ?? 0)
+
+  // Funil real
+  const funnelRes = await Promise.all([
+    query(`SELECT COUNT(*) FROM conversations`),
+    query(`SELECT COUNT(*) FROM clients WHERE stage != 'lead'`),
+    query(`SELECT COUNT(*) FROM clients WHERE stage = 'consulta' OR stage = 'proposta' OR stage = 'fechado'`),
+    query(`SELECT COUNT(*) FROM clients WHERE stage = 'proposta' OR stage = 'fechado'`),
+    query(`SELECT COUNT(*) FROM clients WHERE stage = 'fechado'`),
+  ])
+  const fTotal = Number(funnelRes[0].rows[0].count)
+  const funnel = fTotal === 0 ? [] : [
+    { label: 'Contatos recebidos',  value: fTotal },
+    { label: 'Leads qualificados',  value: Number(funnelRes[1].rows[0].count), pct: fTotal > 0 ? Math.round(Number(funnelRes[1].rows[0].count)/fTotal*100)+'%' : null },
+    { label: 'Em consulta+',        value: Number(funnelRes[2].rows[0].count), pct: fTotal > 0 ? Math.round(Number(funnelRes[2].rows[0].count)/fTotal*100)+'%' : null },
+    { label: 'Com proposta',        value: Number(funnelRes[3].rows[0].count), pct: fTotal > 0 ? Math.round(Number(funnelRes[3].rows[0].count)/fTotal*100)+'%' : null },
+    { label: 'Contratos fechados',  value: Number(funnelRes[4].rows[0].count), pct: fTotal > 0 ? Math.round(Number(funnelRes[4].rows[0].count)/fTotal*100)+'%' : null },
+  ]
+
   res.json({
-    activeConversations: Number(activeConvs.rows[0].count),
-    pendingAlerts      : Number(pendingAlerts.rows[0].count),
-    totalClients       : Number(totalClients.rows[0].count),
+    activeConversations : Number(activeConvs.rows[0].count),
+    pendingAlerts       : Number(pendingAlerts.rows[0].count),
+    totalClients        : Number(totalClients.rows[0].count),
+    totalConversations  : Number(totalConvs.rows[0].count),
+    totalAlerts         : Number(totalAlerts.rows[0].count),
     aiRate,
-    areaBreakdown      : areaData,
+    weeklyConversations,
+    areaBreakdown       : areaData,
+    funnel,
   })
 })
 
