@@ -121,3 +121,31 @@ export async function runAuthMigration() {
   `)
   console.log('[DB] Auth migration concluída.')
 }
+
+export async function runSettingsMigration() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      key           TEXT UNIQUE NOT NULL,
+      value         TEXT,
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+  `)
+
+  // Valores padrão — só insere se não existirem
+  await query(`
+    INSERT INTO settings (key, value) VALUES
+      ('office_name',      'Escritório de Advocacia'),
+      ('office_phone',     ''),
+      ('office_email',     ''),
+      ('office_area',      'Consumidor · Previdenciário · Bancário'),
+      ('office_logo',      ''),
+      ('welcome_message',  'Olá! 👋 Bem-vindo ao nosso escritório. Como posso ajudar você hoje?'),
+      ('office_hours_start', '08:00'),
+      ('office_hours_end',   '18:00'),
+      ('office_hours_24h',   'false')
+    ON CONFLICT (key) DO NOTHING;
+  `)
+
+  console.log('[DB] Settings migration concluída.')
+}
